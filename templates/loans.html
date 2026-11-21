@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Loans & Guarantors | {{ chama.name }}{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900">Loans &amp; Peer-to-Peer Guarantors</h1>
+    <p class="text-sm text-slate-500 mt-1">
+        Borrow up to <span class="font-bold text-slate-800">{{ chama.loan_multiplier }}x</span> your verified savings
+        (Max Eligible: <span class="font-bold text-emerald-600">KES {{ max_loan_limit|intcomma }}</span>) at
+        <span class="font-bold text-slate-800">{{ chama.interest_rate }}%</span> interest.
+    </p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <!-- Loan Request Form -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm h-fit">
+        <h2 class="text-lg font-bold text-slate-900 mb-1">Apply for a Chama Loan</h2>
+        <p class="text-xs text-slate-500 mb-5">Chama Available Pool: <span class="font-bold text-emerald-700">KES {{ chama_pool|intcomma }}</span></p>
+
+        <form method="POST" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Principal Amount (KES)</label>
+                <input type="number" step="0.01" min="100" name="principal" required placeholder="e.g., 5000"
+                       class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-emerald-500 focus:outline-none">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Repayment Period</label>
+                <select name="duration_days" class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-emerald-500 focus:outline-none">
+                    <option value="30">30 Days (1 Month)</option>
+                    <option value="60">60 Days (2 Months)</option>
+                    <option value="90">90 Days (3 Months)</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Select Peer Guarantor</label>
+                <select name="guarantor_id" required class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-emerald-500 focus:outline-none">
+                    <option value="">-- Choose an active Chama member --</option>
+                    {% for member in other_members %}
+                    <option value="{{ member.id }}">{{ member.user.full_name }} ({{ member.user.phone_number }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Guaranteed Amount (KES)</label>
+                <input type="number" step="0.01" min="100" name="guaranteed_amount" required placeholder="Amount pledged by guarantor"
+                       class="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-sm focus:border-emerald-500 focus:outline-none">
+            </div>
+
+            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition">
+                Submit Loan Application
+            </button>
+        </form>
+    </div>
+
+    <!-- Group Loans & Multi-Signature Approvals -->
+    <div class="lg:col-span-2 space-y-4">
+        <h2 class="text-lg font-bold text-slate-900">Chama Loan Book &amp; Multi-Signature Workflow</h2>
+
+        {% for loan in chama_loans %}
+        <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 border-b border-slate-100">
+                <div>
+                    <span class="text-xs font-mono text-slate-400">LOAN #{{ loan.id }}</span>
+                    <h3 class="text-lg font-bold text-slate-900">{{ loan.membership.user.full_name }}</h3>
+                    <p class="text-xs text-slate-500">Due Date: {{ loan.due_date|date:"d M Y" }} &bull; Interest: {{ loan.interest_rate }}%</p>
+                </div>
+
+                <div class="text-left sm:text-right">
+                    <p class="text-sm font-bold text-slate-900">Principal: KES {{ loan.principal|intcomma }}</p>
+                    <p class="text-xs text-slate-600">Total Due: KES {{ loan.total_due|intcomma }} | Bal: <span class="font-bold text-rose-600">KES {{ loan.remaining|intcomma }}</span></p>
+                    <span class="inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold
+                        {% if loan.status == 'ACTIVE' %}bg-emerald-100 text-emerald-800
+                        {% elif loan.status == 'PAID' %}bg-sky-100 text-sky-800
+                        {% elif loan.status == 'PENDING_APPROVAL' %}bg-amber-100 text-amber-800
+                        {% else %}bg-rose-100 text-rose-800{% endif %}">
+                        {{ loan.get_status_display }}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Guarantors & Treasurer Sign-Off -->
+            <div class="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div class="space-y-1">
+                    <p class="text-xs font-semibold uppercase text-slate-400">Guarantors</p>
+                    {% for g in loan.guarantors.all %}
+                    <div class="flex items-center space-x-2 text-xs">
+                        <span class="font-medium text-slate-800">{{ g.guarantor.user.full_name }} (KES {{ g.guaranteed_amount|intcomma }})</span>
+                        {% if g.approved %}
+                        <span class="text-emerald-600 font-bold">&#10003; Approved</span>
+                        {% else %}
+                        <span class="text-amber-600 font-semibold">&#9203; Pending</span>
+                        {% if g.guarantor == active_membership %}
+                        <form method="POST" action="{% url 'approve_guarantor' g.id %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="ml-2 bg-emerald-600 text-white px-2.5 py-0.5 rounded text-xs font-semibold">Sign Off</button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if loan.status == 'PENDING_APPROVAL' and active_membership.role in 'TREASURER,CHAIR' %}
+                <form method="POST" action="{% url 'disburse_loan' loan.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition">
+                        Treasurer Approve &amp; Disburse
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% empty %}
+        <div class="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-400 text-sm">
+            No loan applications recorded in this Chama yet.
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

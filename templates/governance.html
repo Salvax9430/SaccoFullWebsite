@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Merry-Go-Round & Governance | ChamaLedger{% endblock %}
+
+{% block content %}
+<div class="flex flex-col md:flex-row md:items-center md:justify-between mb-8 gap-4">
+    <div>
+        <h1 class="text-3xl font-extrabold text-slate-900">ROSCA Merry-Go-Round & Governance</h1>
+        <p class="text-slate-500 mt-1">Automated payout rotation queue, member equity standings, and SaaS subscription controls.</p>
+    </div>
+
+    {% if membership.role in "CHAIRPERSON,TREASURER" %}
+    <div class="flex flex-wrap gap-3">
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="run_penalties">
+            <button type="submit" class="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-sm shadow transition cursor-pointer">
+                Run Cycle #{{ active_cycle.cycle_number }} Penalty Audit
+            </button>
+        </form>
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="disburse_pot">
+            <button type="submit" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm shadow transition cursor-pointer">
+                Disburse Merry-Go-Round Pot
+            </button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+
+<!-- SAAS SUBSCRIPTION & TIER MANAGEMENT CARD -->
+<div class="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-6 text-white shadow-sm mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div>
+        <div class="flex items-center gap-3 mb-2">
+            {% if chama.is_pro_active %}
+            <span class="px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider bg-emerald-500 text-slate-950">
+                PRO PLAN ACTIVE
+            </span>
+            {% if chama.subscription_expires_at %}
+            <span class="text-xs text-slate-300">Valid until {{ chama.subscription_expires_at|date:"M d, Y" }}</span>
+            {% endif %}
+            {% else %}
+            <span class="px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider bg-amber-400 text-slate-950">
+                STARTER PLAN (FREE)
+            </span>
+            <span class="text-xs text-slate-300">Max {{ chama.member_limit }} members &bull; KES 10 M-Pesa fee</span>
+            {% endif %}
+        </div>
+        <h2 class="text-xl font-bold">ChamaLedger Enterprise SaaS Subscription</h2>
+        <p class="text-sm text-slate-300 mt-1">
+            {% if chama.is_pro_active %}
+            Your Chama enjoys unlimited member capacity, 50% reduced M-Pesa fees (KES 5/tx), and instant audited PDF statements.
+            {% else %}
+            Upgrade to <strong>ChamaLedger Pro (KES 1,000 / 30 days)</strong> to unlock unlimited members, cut M-Pesa fees to KES 5/tx, and generate audited PDF statements.
+            {% endif %}
+        </p>
+    </div>
+
+    <div class="shrink-0">
+        {% if membership.role in "CHAIRPERSON,TREASURER" %}
+        <form method="POST" action="{% url 'upgrade_chama_pro' %}">
+            {% csrf_token %}
+            <button type="submit" class="px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold rounded-xl text-sm shadow-lg transition cursor-pointer">
+                {% if chama.is_pro_active %}
+                Extend Pro +30 Days (KES 1,000)
+                {% else %}
+                Upgrade to Pro via M-Pesa (KES 1,000)
+                {% endif %}
+            </button>
+        </form>
+        {% else %}
+        <span class="text-xs text-slate-400 italic">Only Chairperson or Treasurer can manage billing</span>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <!-- Merry-Go-Round Rotation Queue -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-6 border-b border-slate-100">
+            <h2 class="text-lg font-bold text-slate-900">Merry-Go-Round Rotation Queue</h2>
+            <p class="text-xs text-slate-500">Order in which members receive the pooled cycle contributions</p>
+        </div>
+        <div class="divide-y divide-slate-100">
+            {% for slot in payout_queue %}
+            <div class="p-5 flex items-center justify-between {% if next_recipient and next_recipient.id == slot.membership.id %}bg-emerald-50/70{% endif %}">
+                <div class="flex items-center space-x-4">
+                    <span class="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm {% if next_recipient and next_recipient.id == slot.membership.id %}bg-emerald-600 text-white{% else %}bg-slate-900 text-white{% endif %}">
+                        #{{ slot.rotation_order }}
+                    </span>
+                    <div>
+                        <p class="font-bold text-slate-900">{{ slot.membership.user.full_name }}</p>
+                        <p class="text-xs text-slate-500">{{ slot.membership.user.phone_number }}</p>
+                    </div>
+                </div>
+                {% if slot.is_paid %}
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-500">
+                    Paid
+                </span>
+                {% elif next_recipient and next_recipient.id == slot.membership.id %}
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Next in Line
+                </span>
+                {% else %}
+                <span class="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+                    Queued
+                </span>
+                {% endif %}
+            </div>
+            {% empty %}
+            <div class="p-6 text-center text-slate-400 text-sm">No active members in rotation queue.</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Member Equity & Penalty Standings -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-6 border-b border-slate-100">
+            <h2 class="text-lg font-bold text-slate-900">Member Equity & Standings</h2>
+            <p class="text-xs text-slate-500">Verified cumulative savings and penalties per active member</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+                    <tr>
+                        <th class="px-6 py-3.5">Member</th>
+                        <th class="px-6 py-3.5">Role</th>
+                        <th class="px-6 py-3.5 text-right">Net Savings</th>
+                        <th class="px-6 py-3.5 text-right">Penalties</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% for m in all_members %}
+                    <tr>
+                        <td class="px-6 py-4 font-semibold text-slate-900">{{ m.user.full_name }}</td>
+                        <td class="px-6 py-4 text-xs text-slate-500">{{ m.get_role_display }}</td>
+                        <td class="px-6 py-4 text-right font-bold text-emerald-600">KES {{ m.total_savings|intcomma }}</td>
+                        <td class="px-6 py-4 text-right font-semibold text-rose-600">KES {{ m.total_penalties|intcomma }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

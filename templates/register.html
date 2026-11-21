@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Create Account | ChamaLedger{% endblock %}
+{% block auth_content %}
+<div class="max-w-md w-full mx-auto bg-white rounded-2xl shadow-xl p-8">
+    <div class="text-center mb-6">
+        <h2 class="text-2xl font-bold text-slate-900">Create Member Account</h2>
+        <p class="text-sm text-slate-500">KYC-verified identity for Chama savings &amp; loans</p>
+    </div>
+
+    <form method="POST" class="space-y-4">
+        {% csrf_token %}
+        {% for field in form %}
+        <div>
+            <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">{{ field.label }}</label>
+            <input type="{{ field.field.widget.input_type }}" name="{{ field.name }}"
+                   value="{{ field.value|default:'' }}"
+                   placeholder="{{ field.field.widget.attrs.placeholder|default:'' }}"
+                   {% if field.field.required %}required{% endif %}
+                   class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none">
+            {% if field.errors %}
+            <p class="text-xs text-rose-600 mt-1">{{ field.errors.0 }}</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        {% if form.non_field_errors %}
+        <div class="p-3 rounded-lg bg-rose-50 text-rose-700 text-xs">{{ form.non_field_errors.0 }}</div>
+        {% endif %}
+
+        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl transition">
+            Register &amp; Continue
+        </button>
+    </form>
+
+    <p class="mt-6 text-center text-sm text-slate-600">
+        Already registered? <a href="{% url 'login' %}" class="text-emerald-600 font-semibold hover:underline">Sign In</a>
+    </p>
+</div>
+{% endblock %}
