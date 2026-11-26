@@ -561,7 +561,7 @@ def governance_view(request):
     })
 
 
-# --- Official PDF Financial Statement Generator (Pro Feature) ---
+# --- Official PDF Financial Statement Generator ---
 
 @login_required
 def download_statement_pdf(request):
@@ -578,14 +578,28 @@ def download_statement_pdf(request):
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_RIGHT, TA_CENTER
 
-    membership = (
-        Membership.objects.filter(user=request.user, is_active=True)
-        .select_related("chama", "user")
-        .first()
-    )
+    membership, _ = _get_active_membership(request)
+    chama_param = request.GET.get("chama_id")
+    if chama_param and chama_param.isdigit():
+        explicit_mem = (
+            Membership.objects.filter(
+                user=request.user, chama_id=int(chama_param), is_active=True
+            )
+            .select_related("chama", "user")
+            .first()
+        )
+        if explicit_mem:
+            membership = explicit_mem
+            request.session["active_membership_id"] = membership.id
+
     if not membership:
         return redirect("onboarding")
 
+    membership = (
+        Membership.objects.filter(pk=membership.pk)
+        .select_related("chama", "user")
+        .first()
+    )
     chama = membership.chama
     local_now = timezone.localtime(timezone.now())
     generated_str = local_now.strftime("%d %b %Y, %I:%M:%S %p EAT")
@@ -602,14 +616,14 @@ def download_statement_pdf(request):
         ).aggregate(total=Sum("amount"))["total"]
         or Decimal("0.00")
     )
-    chama_pool = member_deposits
+    chama_pool = get_chama_liquid_cash(chama)
     penalties = (
         Transaction.objects.filter(
             membership=membership, tx_type="PENALTY", status="COMPLETED"
         ).aggregate(total=Sum("amount"))["total"]
         or Decimal("0.00")
     )
-    loan_limit = member_deposits * Decimal("3.00")
+    loan_limit = (member_deposits * chama.loan_multiplier).quantize(Decimal('0.01'))
 
     digest_payload = (
         f"{chama.id}|{chama.name}|{request.user.phone_number}|"

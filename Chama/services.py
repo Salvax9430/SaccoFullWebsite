@@ -45,7 +45,8 @@ def get_or_create_active_cycle(chama: Chama) -> Cycle:
 
     last_cycle = Cycle.objects.filter(chama=chama).order_by("-cycle_number").first()
     next_num = (last_cycle.cycle_number + 1) if last_cycle else 1
-    days = 7 if chama.frequency == Chama.Frequency.WEEKLY else 30
+    freq_val = getattr(chama, 'cycle_frequency', None)
+    days = 7 if str(freq_val).upper() == 'WEEKLY' else 30
     today = timezone.localdate()
 
     return Cycle.objects.create(
